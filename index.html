@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOXL · Morning Analysis Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #060608;
+      --bg2:       #0d0d12;
+      --bg3:       #12121a;
+      --border:    rgba(255,255,255,0.06);
+      --border2:   rgba(255,255,255,0.1);
+      --green:     #00ffa3;
+      --green-dim: rgba(0,255,163,0.08);
+      --yellow:    #ffd166;
+      --yellow-dim:rgba(255,209,102,0.08);
+      --red:       #ff4d6d;
+      --red-dim:   rgba(255,77,109,0.08);
+      --blue:      #4cc9f0;
+      --text:      #e8e8f0;
+      --muted:     #4a4a5a;
+      --muted2:    #2a2a35;
+      --font-display: 'Orbitron', monospace;
+      --font-mono:    'Space Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── SCANLINE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.07) 2px,
+        rgba(0,0,0,0.07) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* ── AMBIENT GLOW ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -30%;
+      left: -20%;
+      width: 80%;
+      height: 80%;
+      background: radial-gradient(ellipse, rgba(0,255,163,0.04) 0%, transparent 65%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .ambient-right {
+      position: fixed;
+      bottom: -20%;
+      right: -10%;
+      width: 60%;
+      height: 60%;
+      background: radial-gradient(ellipse, rgba(76,201,240,0.04) 0%, transparent 65%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── LAYOUT ── */
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px 28px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 28px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .header-left {}
+
+    .ticker-label {
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .ticker-name {
+      font-family: var(--font-display);
+      font-size: 52px;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      line-height: 1;
+      color: var(--text);
+      text-shadow: 0 0 40px rgba(0,255,163,0.2);
+    }
+
+    .ticker-sub {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      margin-top: 6px;
+      text-transform: uppercase;
+    }
+
+    .header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .signal-badge {
+      padding: 10px 24px;
+      border-radius: 6px;
+      text-align: center;
+      transition: all 0.4s ease;
+    }
+
+    .signal-badge .signal-sub {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .signal-badge .signal-val {
+      font-family: var(--font-display);
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: 0.15em;
+    }
+
+    .timestamp {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+
+    /* ── LIVE DOT ── */
+    .live-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      color: var(--green);
+    }
+
+    .live-dot::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    /* ── GRID LAYOUTS ── */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .grid-chart {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .grid-bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+
+    .card:hover { border-color: var(--border2); }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    }
+
+    .card-label {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    /* ── PRICE CARD ── */
+    .price-big {
+      font-family: var(--font-display);
+      font-size: 42px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .price-change {
+      font-size: 13px;
+      margin-top: 6px;
+      font-weight: 700;
+    }
+
+    /* ── EMA CARD ── */
+    .ema-val {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      line-height: 1;
+    }
+
+    .ema-dist {
+      font-size: 11px;
+      margin-top: 6px;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── SIGNAL BAR ── */
+    .signal-desc {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .risk-track {
+      height: 4px;
+      background: var(--muted2);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+
+    .risk-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    .risk-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 0.1em;
+    }
+
+    /* ── TARGETS ── */
+    .target-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .target-box {
+      background: var(--bg3);
+      border: 1px solid rgba(0,255,163,0.12);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .target-label {
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    .target-price {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: 0.05em;
+    }
+
+    .target-gain {
+      font-size: 10px;
+      color: var(--green);
+      opacity: 0.6;
+      margin-top: 2px;
+    }
+
+    /* ── KEY LEVELS ── */
+    .level-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .level-row:last-child { border-bottom: none; }
+
+    .level-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .level-info { flex: 1; }
+
+    .level-name {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .level-desc {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .level-price {
+      font-family: var(--font-display);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+
+    /* ── TRADINGVIEW CHART ── */
+    .chart-container {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .chart-title {
+      font-size: 10px;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .tv-widget-wrapper {
+      height: 420px;
+    }
+
+    /* ── MINI TICKER TAPE ── */
+    .ticker-tape-wrap {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .ticker-tape-label {
+      padding: 8px 16px 4px;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      color: var(--muted);
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── NOTES ── */
+    .notes-input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .notes-input {
+      flex: 1;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .notes-input:focus { border-color: var(--green); }
+
+    .btn {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 8px 14px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      cursor: pointer;
+      letter-spacing: 0.08em;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn:hover { border-color: var(--green); color: var(--green); }
+
+    .note-item {
+      display: flex;
+      gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+
+    .note-item:last-child { border-bottom: none; }
+
+    .note-time { color: var(--muted); min-width: 48px; font-size: 10px; }
+    .note-text { color: #9090a8; line-height: 1.4; }
+
+    /* ── HISTORY ── */
+    .history-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .history-row:last-child { border-bottom: none; }
+
+    .history-date { font-size: 11px; color: var(--muted); }
+    .history-price { font-size: 13px; font-family: var(--font-display); font-weight: 700; letter-spacing: 0.04em; }
+
+    .badge {
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      padding: 3px 9px;
+      border-radius: 3px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    /* ── INPUTS PANEL ── */
+    .inputs-panel {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr) auto;
+      gap: 10px;
+      margin-bottom: 14px;
+      align-items: end;
+    }
+
+    .input-group { display: flex; flex-direction: column; gap: 5px; }
+
+    .input-label {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .input-field {
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      padding: 9px 12px;
+      color: var(--text);
+      font-family: var(--font-display);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      outline: none;
+      width: 100%;
+      transition: border-color 0.2s;
+    }
+
+    .input-field:focus { border-color: var(--green); box-shadow: 0 0 0 2px rgba(0,255,163,0.08); }
+
+    .update-btn {
+      background: linear-gradient(135deg, rgba(0,255,163,0.12), rgba(0,255,163,0.06));
+      border: 1px solid rgba(0,255,163,0.3);
+      border-radius: 6px;
+      padding: 9px 20px;
+      color: var(--green);
+      font-family: var(--font-display);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      height: 40px;
+      text-transform: uppercase;
+    }
+
+    .update-btn:hover {
+      background: rgba(0,255,163,0.15);
+      box-shadow: 0 0 20px rgba(0,255,163,0.15);
+    }
+
+    /* ── DISCLAIMER ── */
+    footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 9px;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      border-top: 1px solid var(--border);
+      margin-top: 14px;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 1100px) {
+      .grid-chart { grid-template-columns: 1fr; }
+      .grid-bottom { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 768px) {
+      .grid-3 { grid-template-columns: 1fr; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .grid-bottom { grid-template-columns: 1fr; }
+      .inputs-panel { grid-template-columns: 1fr 1fr; }
+      .ticker-name { font-size: 36px; }
+    }
+
+    /* ── FADE IN ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card, .chart-container, .ticker-tape-wrap {
+      animation: fadeUp 0.5s ease both;
+    }
+
+    .card:nth-child(1) { animation-delay: 0.05s; }
+    .card:nth-child(2) { animation-delay: 0.10s; }
+    .card:nth-child(3) { animation-delay: 0.15s; }
+    .card:nth-child(4) { animation-delay: 0.20s; }
+    .card:nth-child(5) { animation-delay: 0.25s; }
+    .card:nth-child(6) { animation-delay: 0.30s; }
+  </style>
+</head>
+<body>
+<div class="ambient-right"></div>
+
+<div class="container">
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="header-left">
+      <div class="ticker-label">Direxion Daily Semiconductors Bull 3× ETF</div>
+      <div class="ticker-name">SOXL</div>
+      <div class="ticker-sub">Morning Analysis Dashboard &nbsp;·&nbsp; <span class="live-dot">LIVE</span></div>
+    </div>
+    <div class="header-right">
+      <div class="signal-badge" id="signalBadge">
+        <div class="signal-sub">TODAY'S SIGNAL</div>
+        <div class="signal-val" id="signalVal">—</div>
+      </div>
+      <div class="timestamp" id="timestamp">—</div>
+    </div>
+  </header>
+
+  <!-- ── TICKER TAPE (TradingView) ── -->
+  <div class="ticker-tape-wrap">
+    <div class="ticker-tape-label">Sector Watch — Live Prices</div>
+    <!-- TradingView Widget BEGIN -->
+    <div class="tradingview-widget-container">
+      <div class="tradingview-widget-container__widget"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-ticker-tape.js" async>
+      {
+        "symbols": [
+          {"proName": "NASDAQ:SOXL","title": "SOXL"},
+          {"proName": "NASDAQ:SOXX","title": "SOXX"},
+          {"proName": "NASDAQ:NVDA","title": "NVDA"},
+          {"proName": "NASDAQ:AMD","title": "AMD"},
+          {"proName": "NASDAQ:INTC","title": "INTC"},
+          {"proName": "NASDAQ:AVGO","title": "AVGO"},
+          {"proName": "NASDAQ:TSM","title": "TSM"},
+          {"proName": "NASDAQ:QCOM","title": "QCOM"},
+          {"proName": "INDEX:SOX","title": "SOX Index"},
+          {"proName": "SP:SPX","title": "S&P 500"}
+        ],
+        "showSymbolLogo": true,
+        "isTransparent": true,
+        "displayMode": "compact",
+        "colorTheme": "dark",
+        "locale": "en"
+      }
+      </script>
+    </div>
+    <!-- TradingView Widget END -->
+  </div>
+
+  <!-- ── INPUTS PANEL ── -->
+  <div class="inputs-panel">
+    <div class="input-group">
+      <label class="input-label">Current Price ($)</label>
+      <input class="input-field" type="number" id="inputPrice" step="0.01" value="50.40" />
+    </div>
+    <div class="input-group">
+      <label class="input-label">EMA 9 ($)</label>
+      <input class="input-field" type="number" id="inputEma9" step="0.01" value="51.20" />
+    </div>
+    <div class="input-group">
+      <label class="input-label">EMA 21 ($)</label>
+      <input class="input-field" type="number" id="inputEma21" step="0.01" value="52.40" />
+    </div>
+    <div class="input-group">
+      <label class="input-label">Prev Close ($)</label>
+      <input class="input-field" type="number" id="inputPrev" step="0.01" value="53.42" />
+    </div>
+    <button class="update-btn" onclick="updateDashboard()">↺ UPDATE</button>
+  </div>
+
+  <!-- ── TOP METRICS ROW ── -->
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-label">Current Price</div>
+      <div class="price-big" id="dispPrice">$50.40</div>
+      <div class="price-change" id="dispChange">— vs prev close</div>
+    </div>
+    <div class="card">
+      <div class="card-label">EMA 9 &nbsp;·&nbsp; Short-Term Trend</div>
+      <div class="ema-val" id="dispEma9" style="color:var(--red)">$51.20</div>
+      <div class="ema-dist" id="dispEma9Dist">— above current price</div>
+    </div>
+    <div class="card">
+      <div class="card-label">EMA 21 &nbsp;·&nbsp; Mid-Term Trend</div>
+      <div class="ema-val" id="dispEma21" style="color:var(--red)">$52.40</div>
+      <div class="ema-dist" id="dispEma21Dist">— above current price</div>
+    </div>
+  </div>
+
+  <!-- ── SIGNAL + TARGETS ── -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-label">Signal Analysis</div>
+      <p class="signal-desc" id="signalDesc">Loading analysis...</p>
+      <div style="margin-bottom:8px;">
+        <div class="risk-track">
+          <div class="risk-fill" id="riskFill" style="width:0%"></div>
+        </div>
+        <div class="risk-labels">
+          <span>LOW RISK</span>
+          <span id="riskLabel">— RISK · Avg EMA Distance: —%</span>
+          <span>HIGH RISK</span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-label">Sell Targets from Entry</div>
+      <div class="target-grid">
+        <div class="target-box">
+          <div class="target-label">Target 1 &nbsp;+10%</div>
+          <div class="target-price" id="t1">$—</div>
+          <div class="target-gain">Gain: 10.0%</div>
+        </div>
+        <div class="target-box">
+          <div class="target-label">Target 2 &nbsp;+15%</div>
+          <div class="target-price" id="t2">$—</div>
+          <div class="target-gain">Gain: 15.0%</div>
+        </div>
+        <div class="target-box" style="border-color:rgba(255,209,102,0.12)">
+          <div class="target-label">Stop Loss &nbsp;-5%</div>
+          <div class="target-price" id="sl" style="color:var(--red)">$—</div>
+          <div class="target-gain" style="color:var(--red)">Risk: 5.0%</div>
+        </div>
+        <div class="target-box" style="border-color:rgba(255,209,102,0.12)">
+          <div class="target-label">R/R Ratio</div>
+          <div class="target-price" id="rr" style="color:var(--yellow)">3:1</div>
+          <div class="target-gain" style="color:var(--yellow)">T1 vs Stop</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CHART + KEY LEVELS ── -->
+  <div class="grid-chart">
+    <!-- TradingView Advanced Chart Widget -->
+    <div class="chart-container">
+      <div class="chart-header">
+        <span class="chart-title">SOXL Advanced Chart</span>
+        <span class="live-dot">Live Feed</span>
+      </div>
+      <div class="tv-widget-wrapper">
+        <!-- TradingView Widget BEGIN -->
+        <div class="tradingview-widget-container" style="height:100%">
+          <div id="tradingview_chart" style="height:100%"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/tv.js" async onload="initChart()"></script>
+        </div>
+        <!-- TradingView Widget END -->
+      </div>
+    </div>
+
+    <!-- Key Levels Panel -->
+    <div class="card" style="align-self: start;">
+      <div class="card-label">Key Watch Levels</div>
+
+      <div class="level-row">
+        <div class="level-dot" style="background:var(--green); box-shadow:0 0 6px var(--green)"></div>
+        <div class="level-info">
+          <div class="level-name">🟢 Bull Trigger</div>
+          <div class="level-desc">Reclaim EMA 9 on volume → entry confirmed</div>
+        </div>
+        <div class="level-price" style="color:var(--green)" id="lvlBull">—</div>
+      </div>
+
+      <div class="level-row">
+        <div class="level-dot" style="background:var(--yellow)"></div>
+        <div class="level-info">
+          <div class="level-name">🟡 Resistance 1</div>
+          <div class="level-desc">EMA 21 — overhead seller zone</div>
+        </div>
+        <div class="level-price" style="color:var(--yellow)" id="lvlRes1">—</div>
+      </div>
+
+      <div class="level-row">
+        <div class="level-dot" style="background:var(--blue)"></div>
+        <div class="level-info">
+          <div class="level-name">🔵 Caution Zone</div>
+          <div class="level-desc">Choppy between price & EMA 9</div>
+        </div>
+        <div class="level-price" style="color:var(--blue)" id="lvlCaution">—</div>
+      </div>
+
+      <div class="level-row">
+        <div class="level-dot" style="background:var(--red); box-shadow:0 0 6px var(--red)"></div>
+        <div class="level-info">
+          <div class="level-name">🔴 Danger Level</div>
+          <div class="level-desc">-3% from price — reassess thesis</div>
+        </div>
+        <div class="level-price" style="color:var(--red)" id="lvlDanger">—</div>
+      </div>
+
+      <div class="level-row">
+        <div class="level-dot" style="background:#9b5de5"></div>
+        <div class="level-info">
+          <div class="level-name">🟣 Hard Stop</div>
+          <div class="level-desc">-5% stop loss — exit without hesitation</div>
+        </div>
+        <div class="level-price" style="color:#9b5de5" id="lvlStop">—</div>
+      </div>
+
+      <!-- Mini Sparkline -->
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border)">
+        <div class="card-label" style="margin-bottom:8px">EMA Alignment</div>
+        <div id="emaAlignment" style="font-size:11px; line-height:1.8; color:var(--muted)">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── BOTTOM ROW: History, Notes, Sector ── -->
+  <div class="grid-bottom">
+
+    <!-- Signal History -->
+    <div class="card">
+      <div class="card-label">Signal History</div>
+      <div id="historyList">
+        <div class="history-row">
+          <span class="history-date">Mar 6, 2026</span>
+          <span class="history-price" style="color:var(--text)">$50.40</span>
+          <span class="badge" style="background:var(--red-dim);color:var(--red);border:1px solid rgba(255,77,109,0.2)">WAIT</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Morning Notes -->
+    <div class="card">
+      <div class="card-label">Morning Notes</div>
+      <div class="notes-input-row">
+        <input class="notes-input" id="noteInput" type="text" placeholder="Type a note, press Enter..." onkeydown="if(event.key==='Enter') addNote()" />
+        <button class="btn" onclick="addNote()">+ Add</button>
+      </div>
+      <div id="notesList">
+        <div class="note-item">
+          <span class="note-time">09:00</span>
+          <span class="note-text">Price below both EMAs. EMA 9 @ $51.20, EMA 21 @ $52.40. Bearish alignment — wait for reclaim.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TradingView Mini Chart — Related -->
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div style="padding:14px 18px 10px; border-bottom:1px solid var(--border);">
+        <div class="card-label" style="margin:0">SOX Semiconductor Index — Live</div>
+      </div>
+      <!-- TradingView Mini Chart Widget BEGIN -->
+      <div class="tradingview-widget-container" style="height:220px">
+        <div class="tradingview-widget-container__widget" style="height:100%"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js" async>
+        {
+          "symbol": "INDEX:SOX",
+          "width": "100%",
+          "height": "220",
+          "locale": "en",
+          "dateRange": "1M",
+          "colorTheme": "dark",
+          "isTransparent": true,
+          "autosize": true,
+          "largeChartUrl": ""
+        }
+        </script>
+      </div>
+      <!-- TradingView Mini Chart Widget END -->
+    </div>
+
+  </div>
+
+  <footer>
+    Not financial advice &nbsp;·&nbsp; For personal analysis only &nbsp;·&nbsp; Data via TradingView &nbsp;·&nbsp; SOXL Morning Dashboard v1.0
+  </footer>
+
+</div><!-- /container -->
+
+<script>
+  // ─── STATE ───────────────────────────────────────────────────────────────
+  let state = {
+    price: 50.40,
+    ema9:  51.20,
+    ema21: 52.40,
+    prev:  53.42,
+  };
+
+  let history = [
+    { date: "Mar 6, 2026", price: 50.40, signal: "WAIT" }
+  ];
+
+  let chartWidget = null;
+
+  // ─── INIT TRADINGVIEW ADVANCED CHART ────────────────────────────────────
+  function initChart() {
+    if (typeof TradingView === 'undefined') return;
+    chartWidget = new TradingView.widget({
+      autosize: true,
+      symbol: "NASDAQ:SOXL",
+      interval: "D",
+      timezone: "America/New_York",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      toolbar_bg: "#0d0d12",
+      enable_publishing: false,
+      withdateranges: true,
+      hide_side_toolbar: false,
+      allow_symbol_change: false,
+      container_id: "tradingview_chart",
+      backgroundColor: "rgba(6, 6, 8, 0)",
+      gridColor: "rgba(255, 255, 255, 0.03)",
+      studies: [
+        "MAExp@tv-basicstudies",
+        "MAExp@tv-basicstudies",
+        "Volume@tv-basicstudies",
+        "RSI@tv-basicstudies"
+      ],
+      studies_overrides: {
+        "moving average exp.0.length": 9,
+        "moving average exp.1.length": 21,
+      },
+      overrides: {
+        "paneProperties.background": "#060608",
+        "paneProperties.backgroundType": "solid",
+        "paneProperties.vertGridProperties.color": "rgba(255,255,255,0.03)",
+        "paneProperties.horzGridProperties.color": "rgba(255,255,255,0.03)",
+        "candleStyle.upColor": "#00ffa3",
+        "candleStyle.downColor": "#ff4d6d",
+        "candleStyle.borderUpColor": "#00ffa3",
+        "candleStyle.borderDownColor": "#ff4d6d",
+        "candleStyle.wickUpColor": "rgba(0,255,163,0.5)",
+        "candleStyle.wickDownColor": "rgba(255,77,109,0.5)",
+      }
+    });
+  }
+
+  // ─── SIGNAL LOGIC ────────────────────────────────────────────────────────
+  function getSignal(price, ema9, ema21) {
+    if (price > ema9 && price > ema21 && ema9 > ema21) {
+      return {
+        label: "BUY",
+        color: "var(--green)",
+        bg: "var(--green-dim)",
+        border: "rgba(0,255,163,0.3)",
+        desc: "Price is above both EMA 9 and EMA 21, with EMA 9 above EMA 21 — full bullish alignment. This is your cleanest entry signal. Look for volume confirmation on the move.",
+        risk: 15
+      };
+    }
+    if (price > ema9 && price < ema21) {
+      return {
+        label: "WATCH",
+        color: "var(--yellow)",
+        bg: "var(--yellow-dim)",
+        border: "rgba(255,209,102,0.3)",
+        desc: "Price has reclaimed EMA 9 but remains below EMA 21. Bullish momentum is building — watch for a break above EMA 21 as the next confirmation trigger.",
+        risk: 45
+      };
+    }
+    if (price < ema9 && price > ema21) {
+      return {
+        label: "CAUTION",
+        color: "var(--blue)",
+        bg: "rgba(76,201,240,0.08)",
+        border: "rgba(76,201,240,0.3)",
+        desc: "Unusual configuration — price below EMA 9 but above EMA 21. Short-term weakness in a broader uptrend. Watch for EMA 9 reclaim.",
+        risk: 55
+      };
+    }
+    return {
+      label: "WAIT",
+      color: "var(--red)",
+      bg: "var(--red-dim)",
+      border: "rgba(255,77,109,0.3)",
+      desc: "Price is below both EMA 9 and EMA 21 — bearish alignment. No clean entry signal. Entering here is buying a falling knife. Wait for EMA 9 reclaim before considering a position.",
+      risk: 85
+    };
+  }
+
+  // ─── UPDATE DASHBOARD ────────────────────────────────────────────────────
+  function updateDashboard() {
+    const price = parseFloat(document.getElementById('inputPrice').value) || 0;
+    const ema9  = parseFloat(document.getElementById('inputEma9').value)  || 0;
+    const ema21 = parseFloat(document.getElementById('inputEma21').value) || 0;
+    const prev  = parseFloat(document.getElementById('inputPrev').value)  || 0;
+
+    state = { price, ema9, ema21, prev };
+
+    const sig = getSignal(price, ema9, ema21);
+
+    // Header signal badge
+    const badge = document.getElementById('signalBadge');
+    badge.style.background = sig.bg;
+    badge.style.border = `1px solid ${sig.border}`;
+    document.getElementById('signalVal').style.color = sig.color;
+    document.getElementById('signalVal').textContent = sig.label;
+
+    // Timestamp
+    const now = new Date();
+    document.getElementById('timestamp').textContent =
+      now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }) +
+      ' · ' + now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+
+    // Price display
+    document.getElementById('dispPrice').textContent = '$' + price.toFixed(2);
+    const chg = price - prev;
+    const chgPct = prev > 0 ? (chg / prev * 100) : 0;
+    const chgEl = document.getElementById('dispChange');
+    chgEl.textContent = (chg >= 0 ? '▲ +' : '▼ ') + chg.toFixed(2) + ' (' + chgPct.toFixed(2) + '%) vs prev close';
+    chgEl.style.color = chg >= 0 ? 'var(--green)' : 'var(--red)';
+
+    // EMA displays
+    const ema9Above = ema9 > price;
+    document.getElementById('dispEma9').textContent = '$' + ema9.toFixed(2);
+    document.getElementById('dispEma9').style.color = ema9Above ? 'var(--red)' : 'var(--green)';
+    document.getElementById('dispEma9Dist').textContent =
+      Math.abs(((ema9 - price)/price*100)).toFixed(2) + '% ' + (ema9Above ? 'above' : 'below') + ' current price';
+    document.getElementById('dispEma9Dist').style.color = ema9Above ? 'var(--red)' : 'var(--green)';
+
+    const ema21Above = ema21 > price;
+    document.getElementById('dispEma21').textContent = '$' + ema21.toFixed(2);
+    document.getElementById('dispEma21').style.color = ema21Above ? 'var(--red)' : 'var(--green)';
+    document.getElementById('dispEma21Dist').textContent =
+      Math.abs(((ema21 - price)/price*100)).toFixed(2) + '% ' + (ema21Above ? 'above' : 'below') + ' current price';
+    document.getElementById('dispEma21Dist').style.color = ema21Above ? 'var(--red)' : 'var(--green)';
+
+    // Signal description
+    document.getElementById('signalDesc').textContent = sig.desc;
+
+    // Risk bar
+    document.getElementById('riskFill').style.width = sig.risk + '%';
+    document.getElementById('riskFill').style.background =
+      sig.risk > 70 ? 'var(--red)' : sig.risk > 40 ? 'var(--yellow)' : 'var(--green)';
+    const riskWord = sig.risk > 70 ? 'HIGH' : sig.risk > 40 ? 'MEDIUM' : 'LOW';
+    const avgDist = (Math.abs((ema9-price)/price*100) + Math.abs((ema21-price)/price*100)) / 2;
+    document.getElementById('riskLabel').textContent =
+      riskWord + ' RISK · Avg EMA Distance: ' + avgDist.toFixed(1) + '%';
+
+    // Targets
+    document.getElementById('t1').textContent = '$' + (price * 1.10).toFixed(2);
+    document.getElementById('t2').textContent = '$' + (price * 1.15).toFixed(2);
+    document.getElementById('sl').textContent = '$' + (price * 0.95).toFixed(2);
+    document.getElementById('rr').textContent = '2:1';
+
+    // Key levels
+    document.getElementById('lvlBull').textContent    = '$' + ema9.toFixed(2);
+    document.getElementById('lvlRes1').textContent    = '$' + ema21.toFixed(2);
+    document.getElementById('lvlCaution').textContent = '$' + price.toFixed(2) + '–$' + ema9.toFixed(2);
+    document.getElementById('lvlDanger').textContent  = '$' + (price * 0.97).toFixed(2);
+    document.getElementById('lvlStop').textContent    = '$' + (price * 0.95).toFixed(2);
+
+    // EMA alignment
+    let align = '';
+    if (price > ema9 && ema9 > ema21) align = '✅ Price > EMA9 > EMA21\n→ Full bullish stack';
+    else if (price < ema9 && ema9 < ema21) align = '❌ Price < EMA9 < EMA21\n→ Full bearish stack — wait';
+    else if (price > ema9 && price < ema21) align = '⚠️ Price between EMAs\n→ Partial recovery — watch EMA21';
+    else align = '⚠️ Mixed alignment\n→ No clear trend';
+    document.getElementById('emaAlignment').style.whiteSpace = 'pre-line';
+    document.getElementById('emaAlignment').textContent = align;
+
+    // History update
+    const today = now.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+    const existing = history.findIndex(h => h.date === today);
+    if (existing >= 0) {
+      history[existing] = { date: today, price, signal: sig.label };
+    } else {
+      history.unshift({ date: today, price, signal: sig.label });
+      history = history.slice(0, 7);
+    }
+    renderHistory();
+  }
+
+  // ─── RENDER HISTORY ──────────────────────────────────────────────────────
+  function renderHistory() {
+    const sigColors = {
+      BUY:     { bg:'var(--green-dim)', color:'var(--green)',  border:'rgba(0,255,163,0.2)' },
+      WATCH:   { bg:'var(--yellow-dim)', color:'var(--yellow)', border:'rgba(255,209,102,0.2)' },
+      WAIT:    { bg:'var(--red-dim)',   color:'var(--red)',    border:'rgba(255,77,109,0.2)' },
+      CAUTION: { bg:'rgba(76,201,240,0.08)', color:'var(--blue)', border:'rgba(76,201,240,0.2)' },
+    };
+    const list = document.getElementById('historyList');
+    list.innerHTML = history.map(h => {
+      const c = sigColors[h.signal] || sigColors.WAIT;
+      return `<div class="history-row">
+        <span class="history-date">${h.date}</span>
+        <span class="history-price" style="color:var(--text)">$${h.price.toFixed(2)}</span>
+        <span class="badge" style="background:${c.bg};color:${c.color};border:1px solid ${c.border}">${h.signal}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // ─── NOTES ───────────────────────────────────────────────────────────────
+  function addNote() {
+    const input = document.getElementById('noteInput');
+    const text = input.value.trim();
+    if (!text) return;
+    const time = new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+    const list = document.getElementById('notesList');
+    const el = document.createElement('div');
+    el.className = 'note-item';
+    el.innerHTML = `<span class="note-time">${time}</span><span class="note-text">${text}</span>`;
+    list.insertBefore(el, list.firstChild);
+    input.value = '';
+  }
+
+  // ─── INIT ─────────────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', () => {
+    updateDashboard();
+    // Auto-refresh timestamp every minute
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('timestamp').textContent =
+        now.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric', year:'numeric' }) +
+        ' · ' + now.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+    }, 60000);
+  });
+
+  // Allow Enter key on inputs
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && ['inputPrice','inputEma9','inputEma21','inputPrev'].includes(e.target.id)) {
+      updateDashboard();
+    }
+  });
+</script>
+</body>
+</html>
